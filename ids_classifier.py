@@ -1,20 +1,20 @@
 # ids_classifier.py - Codice completo e aggiornato
 
 # Fase 1: Importazioni e Caricamento Dati
-
 import pandas as pd
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
-from sklearn.model_selection import train_test_split, GridSearchCV # Assicurati che GridSearchCV sia importato
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline # Usiamo questo Pipeline per i modelli SENZA SMOTE
+from sklearn.pipeline import Pipeline
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from owlready2 import *
 
 # Definiamo i nomi delle colonne per il dataset NSL-KDD
 feature_names = [
@@ -82,24 +82,68 @@ y_test = df_test['target']
 
 # Rimuovi colonne con varianza zero (se presenti)
 cols_to_drop_zero_variance = []
-for col in X_train.columns:
-    if X_train[col].nunique() == 1:
+for col in df_train.columns:
+    if df_train[col].nunique() == 1:
         cols_to_drop_zero_variance.append(col)
 
 if cols_to_drop_zero_variance:
     print(f"\nRimozione colonne con varianza zero: {cols_to_drop_zero_variance}")
-    X_train = X_train.drop(columns=cols_to_drop_zero_variance)
-    X_test = X_test.drop(columns=cols_to_drop_zero_variance)
-    # Aggiorna le liste delle colonne dopo la rimozione
-    numerical_cols = X_train.select_dtypes(include=np.number).columns.tolist()
-    categorical_cols = X_train.select_dtypes(include='object').columns.tolist()
+    df_train = df_train.drop(columns=cols_to_drop_zero_variance)
+    df_test = df_test.drop(columns=cols_to_drop_zero_variance)
 
+# --- NUOVA SEZIONE: INTEGRAZIONE DELLE CONOSCENZE DI DOMINIO ---
+
+print("\n--- Integrazione del Knowledge Engineering ---")
+# Carica l'ontologia
+onto = get_ontology("file://nsl_kdd_ontology.owl").load()
+print("Ontologia 'nsl_kdd_ontology.owl' caricata con successo.")
+# Mappa per il ragionamento automatico (semplificato)
+attack_rules = {
+    ('tcp', 'ftp_data'): 'R2L',  # Esempio: R2L
+    ('tcp', 'telnet'): 'R2L',  # Esempio: R2L
+    ('icmp', 'ecr_i'): 'Probe',  # Esempio: Probe
+    ('udp', 'domain_u'): 'Probe',  # Esempio: Probe
+}
+def get_inferred_attack_category(row):
+    """Restituisce una categoria inferita per l'attacco basata su protocollo e servizio."""
+    protocol_type = row['protocol_type']
+    service = row['service']
+    inferred_category = attack_rules.get((protocol_type, service), 'Unknown')
+    if row['attack_type'] == 'normal':
+        return 'Normal'
+    return inferred_category
+
+# Applica la funzione per creare la nuova feature per i dataset di training e test
+df_train['inferred_attack_category'] = df_train.apply(get_inferred_attack_category, axis=1)
+df_test['inferred_attack_category'] = df_test.apply(get_inferred_attack_category, axis=1)
+print("\nNuova feature 'inferred_attack_category' creata con successo.")
+print(df_train[['protocol_type', 'service', 'attack_type', 'inferred_attack_category']].head())
+
+# --- FINE NUOVA SEZIONE ---
+
+# Identifica le feature (X) e la variabile target (y) DOPO AVER AGGIUNTO LA NUOVA FEATURE
+X_train = df_train.drop(['attack_type', 'difficulty', 'target'], axis=1)
+y_train = df_train['target']
+X_test = df_test.drop(['attack_type', 'difficulty', 'target'], axis=1)
+y_test = df_test['target']
+
+# Aggiorna le liste delle colonne dopo la rimozione e l'aggiunta della nuova feature
+numerical_cols = X_train.select_dtypes(include=np.number).columns.tolist()
+categorical_cols = X_train.select_dtypes(include='object').columns.tolist()
+
+# AGGIUNGI QUESTA RIGA: la tua nuova feature non è un tipo 'object'
+# perché contiene stringhe che devono essere trattate come categoriche.
+# L'approccio migliore è aggiungerla alla lista manualmente.
+if 'inferred_attack_category' not in categorical_cols:
+    categorical_cols.append('inferred_attack_category')
 
 preprocessor = ColumnTransformer(
     transformers=[
         ('num', StandardScaler(), numerical_cols),
         ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
     ])
+
+
 
 # Codifica la variabile target (y)
 # 'normal' -> 0, 'attack' -> 1 (l'ordine dipende da LabelEncoder)

@@ -1,0 +1,50 @@
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:ex="http://example.org/nslkdd#"
+    xml:base="http://example.org/nslkdd">
+
+    <owl:Ontology rdf:about=""/>
+
+    <owl:Class rdf:ID="Protocol"/>
+    <owl:Class rdf:ID="TCP" rdfs:subClassOf="#Protocol"/>
+    <owl:Class rdf:ID="UDP" rdfs:subClassOf="#Protocol"/>
+    <owl:Class rdf:ID="ICMP" rdfs:subClassOf="#Protocol"/>
+
+    <owl:Class rdf:ID="Service"/>
+    <owl:Class rdf:ID="HTTP" rdfs:subClassOf="#Service"/>
+    <owl:Class rdf:ID="FTP" rdfs:subClassOf="#Service"/>
+    <owl:Class rdf:ID="Telnet" rdfs:subClassOf="#Service"/>
+    <owl:Class rdf:ID="Other" rdfs:subClassOf="#Service"/>
+
+    <owl:Class rdf:ID="AttackType"/>
+    <owl:Class rdf:ID="DoS" rdfs:subClassOf="#AttackType"/>
+    <owl:Class rdf:ID="Probe" rdfs:subClassOf="#AttackType"/>
+    <owl:Class rdf:ID="R2L" rdfs:subClassOf="#AttackType"/>
+    <owl:Class rdf:ID="U2R" rdfs:subClassOf="#AttackType"/>
+    <owl:Class rdf:ID="Normal" rdfs:subClassOf="#AttackType"/>
+
+    <owl:ObjectProperty rdf:ID="hasProtocol">
+        <rdfs:domain rdf:resource="#AttackType"/>
+        <rdfs:range rdf:resource="#Protocol"/>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:ID="targetsService">
+        <rdfs:domain rdf:resource="#AttackType"/>
+        <rdfs:range rdf:resource="#Service"/>
+    </owl:ObjectProperty>
+
+    <owl:NamedIndividual rdf:ID="ftp_login">
+        <rdf:type rdf:resource="#R2L"/>
+        <hasProtocol rdf:resource="#TCP"/>
+        <targetsService rdf:resource="#FTP"/>
+    </owl:NamedIndividual>
+
+    <owl:NamedIndividual rdf:ID="telnet_login">
+        <rdf:type rdf:resource="#R2L"/>
+        <hasProtocol rdf:resource="#TCP"/>
+        <targetsService rdf:resource="#Telnet"/>
+    </owl:NamedIndividual>
+
+</rdf:RDF>
