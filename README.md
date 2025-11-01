@@ -7,6 +7,7 @@
 ### Indice
 - [Introduzione](#introduzione)
 - [Dataset](#dataset)
+- [Ingegneria della Conoscenza e Ragionamento](#Ingegneria-della-Conoscenza-e-Ragionamento)
 - [Metodologia](#metodologia)
 - [Risultati e Analisi](#risultati-e-analisi)
 - [Conclusioni](#conclusioni)
