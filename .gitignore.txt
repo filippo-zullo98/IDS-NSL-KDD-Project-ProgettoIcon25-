@@ -1,0 +1,11 @@
+# Ambiente Virtuale Python (venv)
+venv/
+
+# File di Cache e Build
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# File del Dataset (troppo grandi per Git)
+KDDTrain+.txt
+KDDTest+.txt
