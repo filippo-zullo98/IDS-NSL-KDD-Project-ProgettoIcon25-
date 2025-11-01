@@ -126,7 +126,10 @@ I risultati di questo progetto dimostrano che l'approccio ibrido, che combina Ma
     ```bash
     pip install -r requirements.txt
     ```
-3.  **Dataset:** Scarica i file `KDDTrain+.txt` e `KDDTest+.txt` e posizionali nella stessa directory dello script.
+3. **Dataset:** Scaricare i file **KDDTrain+.txt** e **KDDTest+.txt** e posizionarli nella stessa directory dello script.
+
+   **Link Diretto al Dataset (Figshare):** [NSL-KDD Dataset File](https://plos.figshare.com/articles/dataset/NSL-KDD_dataset_file_/20405011/1?file=36481909)
+   
 4.  **Esecuzione:** Apri un terminale nella directory del progetto ed esegui il comando:
     ```bash
     python ids_classifier.py
