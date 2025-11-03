@@ -31,7 +31,7 @@ Per questo progetto, abbiamo convertito il problema di classificazione multi-cla
 - `normal`: **67343**
 - `attack`: **58630**
 
-### Integrazione di Knowledge Engineering
+### Ingegneria della Conoscenza e Ragionamento
 Per soddisfare i requisiti del progetto, abbiamo adottato un approccio ibrido che integra l'ingegneria delle conoscenza nella pipeline di machine learning. Questa integrazione ci ha permesso di arricchire il dataset con informazioni di dominio, aggiungendo un livello di intelligenza esplicita al nostro sistema. 
 
 #### Ontologia e rappresentazione della conoscenza
