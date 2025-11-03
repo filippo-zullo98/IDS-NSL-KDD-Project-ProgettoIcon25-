@@ -1,6 +1,6 @@
 # Progetto: Rilevamento delle Intrusioni (IDS) con Machine Learning
 
-**Autore:** Filippo Zullo (mat. 742290)
+**Autore:** Filippo Zullo 
 
 ---
 
