@@ -25,23 +25,23 @@ L'obiettivo, è classificare il traffico di rete come `normal` o `attack` sfrutt
 
 Il dataset utilizzato è l'**NSL-KDD**, una versione raffinata del popolare dataset KDD Cup 99. È composto da **125973 righe e 43 colonne** (nel set di training), ognuna rappresentante una connessione di rete con **41 features** originali. Dopo il pre-processing, che ha incluso la rimozione di colonne con varianza zero, il modello è stato addestrato su **40 features** effettive.
 
-Per questo progetto, abbiamo convertito il problema di classificazione multi-classe in un problema binario, raggruppando tutti i tipi di attacco in una singola categoria `attack`.
+Per questo progetto, è stato convertito il problema di classificazione multi-classe in un problema binario, raggruppando tutti i tipi di attacco in una singola categoria `attack`.
 
 **Distribuzione delle Classi nel Training Set:**
 - `normal`: **67343**
 - `attack`: **58630**
 
 ### Ingegneria della Conoscenza e Ragionamento
-Per soddisfare i requisiti del progetto, abbiamo adottato un approccio ibrido che integra l'ingegneria delle conoscenza nella pipeline di machine learning. Questa integrazione ci ha permesso di arricchire il dataset con informazioni di dominio, aggiungendo un livello di intelligenza esplicita al nostro sistema. 
+Per soddisfare i requisiti del progetto, è stato adottato un approccio ibrido che integra l'ingegneria delle conoscenza nella pipeline di machine learning. Questa integrazione ha permesso di arricchire il dataset con informazioni di dominio, aggiungendo un livello di intelligenza esplicita al nostro sistema. 
 
 #### Ontologia e rappresentazione della conoscenza
-Abbiamo creato un'ontologia in formato OWL, denominata `nsl_kdd_ontology.owl`, per formalizzare le conoscenze sulle diverse tipologie di attacchi di rete. L'ontologia definisce le relazioni e le gerarchie tra concetti come `protocol_type` e `service`, permettendoci di raggruppare combinazioni specifiche in categorie di attacco più ampie e significative, come `R2L` (Remote to Local) o `Probe`.
+Ho creato un'ontologia in formato OWL, denominata `nsl_kdd_ontology.owl`, per formalizzare le conoscenze sulle diverse tipologie di attacchi di rete. L'ontologia definisce le relazioni e le gerarchie tra concetti come `protocol_type` e `service`, permettendo di raggruppare combinazioni specifiche in categorie di attacco più ampie e significative, come `R2L` (Remote to Local) o `Probe`.
 
 #### Ragionamento automatico
-Il nostro script implementa un processo di ragionamento automatico utilizzando la libreria `owlready2`. Sfruttando le regole definite nell'ontologia, il codice è in grado di inferire automaticamente una nuova feature, chiamata `inferred_attack_category`, per ogni riga del dataset. Questo processo si basa su una logica esplicita: ad esempio, se una connessione utilizza il protocollo `tcp` e il servizio `ftp_data`, il ragionamento inferisce la categoria `R2L`. Questo dimostra l'**uso di ragionamento su rappresentazioni logiche**, un requisito fondamentale del progetto.
+Lo script implementa un processo di ragionamento automatico utilizzando la libreria `owlready2`. Sfruttando le regole definite nell'ontologia, il codice è in grado di inferire automaticamente una nuova feature, chiamata `inferred_attack_category`, per ogni riga del dataset. Questo processo si basa su una logica esplicita: ad esempio, se una connessione utilizza il protocollo `tcp` e il servizio `ftp_data`, il ragionamento inferisce la categoria `R2L`. Questo dimostra l'**uso di ragionamento su rappresentazioni logiche**, un requisito fondamentale del progetto.
 
 #### Vantaggio dell'approccio ibrido
-L'aggiunta della feature `inferred_attack_category` ha fornito ai nostri modelli di Machine Learning un contesto aggiuntivo e una conoscenza a priori sul traffico di rete. Questo ha arricchito il dataset e ha contribuito a un sistema di classificazione estremamente robusto ed efficace, che ha raggiunto una performance perfetta nella rilevazione delle intrusioni.
+L'aggiunta della feature `inferred_attack_category` ha fornito ai modelli di Machine Learning un contesto aggiuntivo e una conoscenza a priori sul traffico di rete. Questo ha arricchito il dataset e ha contribuito a un sistema di classificazione estremamente robusto ed efficace, che ha raggiunto una performance perfetta nella rilevazione delle intrusioni.
 
 
 
@@ -56,11 +56,11 @@ La pipeline di Machine Learning è stata implementata in Python utilizzando libr
     - Rimozione di features con varianza zero (e.g., `num_outbound_cmds`).
 
 2.  **Addestramento dei Modelli:**
-    - Abbiamo addestrato e valutato due modelli: **Decision Tree** e **Random Forest**.
-    - Per affrontare il leggero sbilanciamento delle classi, abbiamo confrontato le performance dei modelli **con e senza l'applicazione di SMOTE** (Synthetic Minority Over-sampling Technique) per bilanciare il training set.
+    - sono stati addestrati e valutati due modelli: **Decision Tree** e **Random Forest**.
+    - Per affrontare il leggero sbilanciamento delle classi, sono state confrontate le performance dei modelli **con e senza l'applicazione di SMOTE** (Synthetic Minority Over-sampling Technique) per bilanciare il training set.
 
 3.  **Ottimizzazione degli Iperparametri:**
-    - Abbiamo utilizzato `GridSearchCV` per trovare la migliore combinazione di iperparametri per il modello **Random Forest con SMOTE**, focalizzandoci sul miglioramento dell'**F1-score**.
+    - Ho utilizzato `GridSearchCV` per trovare la migliore combinazione di iperparametri per il modello **Random Forest con SMOTE**, per focalizzarmi sul miglioramento dell'**F1-score**.
 
 ### Risultati e Analisi
 
@@ -75,7 +75,7 @@ La pipeline di Machine Learning è stata implementata in Python utilizzando libr
 | Random Forest | GridSearchCV Ottimizzato | **1.00** |
 
 #### **Analisi dell'Impatto di SMOTE e GridSearchCV**
-L'integrazione di Knowledge Engineering e l'applicazione di tecniche di bilanciamento e ottimizzazione hanno portato a un risultato eccezionale. L'intero sistema di classificazione ha raggiunto un'accuratezza del 100%, dimostrando un'efficacia perfetta nel distinguere il traffico di rete normale da quello malevolo.
+L'integrazione di Knowledge Engineering e l'applicazione di tecniche di bilanciamento e ottimizzazione hanno portato a un risultato ottimo. L'intero sistema di classificazione ha raggiunto un'accuratezza del 100%, dimostrando un'efficacia perfetta nel distinguere il traffico di rete normale da quello malevolo.
 
 * **Classification Report (Decision Tree con SMOTE):**
     ```
@@ -113,7 +113,7 @@ L'ottimizzazione degli iperparametri tramite `GridSearchCV` ha confermato la sol
     ![Matrice di Confusione - Miglior Random Forest (GridSearchCV)](confusion_matrix_best_rf_gridsearch.png)
 
 ### Conclusioni 
-I risultati di questo progetto dimostrano che l'approccio ibrido, che combina Machine Learning e Ingegneria della Conoscenza, è in grado di ottenere performance eccezionali nella classificazione del traffico di rete sul dataset NSL-KDD, raggiungendo un'accuratezza del 100% su tutti i modelli testati. L'integrazione di conoscenza tramite l'ontologia ha arricchito il set di dati, fornendo al modello un contesto aggiuntivo per prendere decisioni. Questo approccio non solo ha garantito risultati perfetti ma ha anche soddisfatto i requisiti del progetto, dimostrando la fattibilità e l'efficacia di un sistema ibrido per la risoluzione di problemi complessi.
+I risultati di questo progetto dimostrano che l'approccio ibrido, che combina Machine Learning e Ingegneria della Conoscenza, è in grado di ottenere performance ottimali nella classificazione del traffico di rete sul dataset NSL-KDD, raggiungendo un'accuratezza del 100% su tutti i modelli testati. L'integrazione di conoscenza tramite l'ontologia ha arricchito il set di dati, fornendo al modello un contesto aggiuntivo per prendere decisioni. Questo approccio non solo ha garantito risultati perfetti ma ha anche soddisfatto i requisiti del progetto, dimostrando la fattibilità e l'efficacia di un sistema ibrido per la risoluzione di problemi complessi.
 
 
 ### Come Eseguire il Codice
