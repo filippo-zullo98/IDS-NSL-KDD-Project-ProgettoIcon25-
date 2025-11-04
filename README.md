@@ -123,15 +123,37 @@ I risultati di questo progetto dimostrano che l'approccio ibrido, che combina Ma
     git clone [https://github.com/filippo-zullo98/IDS-NSL-KDD-Project-ProgettoIcon25-.git](https://github.com/filippo-zullo98/IDS-NSL-KDD-Project-ProgettoIcon25-.git)
     cd IDS-NSL-KDD-Project
     ```
-2.  **Installare le Dipendenze:** Assicurati di avere `pip` installato e installa tutte le librerie necessarie tramite il file `requirements.txt`:
+2. **Dataset:** Scaricare i file **KDDTrain+.txt** e **KDDTest+.txt** e posizionarli nella stessa directory dello script.
+
+   **Link Diretto al Dataset (Figshare):** [NSL-KDD Dataset File](https://plos.figshare.com/articles/dataset/NSL-KDD_dataset_file_/20405011/1?file=36481909)
+
+3. **Creazione dell'Ambiente Virtuale (venv)**
+   ```bash
+    python3 -m venv venv
+    ```
+   (per macchine linux)Se il comando precedente fallisce, significa che mancano i pacchetti di sistema per creare venv.
+   soluzione: Eseguire questo comando (richiede permessi di amministratore):
+    ```bash
+    sudo apt update
+    sudo apt install python3-venv
+    ```
+4. **Attivazione dell'ambiente virtuale**
+
+   Su linux/macOS
+    ```bash
+    source venv/bin/activate
+    ```
+    Su Windows
+    ```bash
+    .\venv\Scripts\activate
+    ```
+    
+6.  **Installare le Dipendenze:** Assicurati di avere `pip` installato e installa tutte le librerie necessarie tramite il file `requirements.txt`:
     ```bash
     pip install -r requirements.txt
     ```
-3. **Dataset:** Scaricare i file **KDDTrain+.txt** e **KDDTest+.txt** e posizionarli nella stessa directory dello script.
-
-   **Link Diretto al Dataset (Figshare):** [NSL-KDD Dataset File](https://plos.figshare.com/articles/dataset/NSL-KDD_dataset_file_/20405011/1?file=36481909)
    
-4.  **Esecuzione:** Apri un terminale nella directory del progetto ed esegui il comando:
+7.  **Esecuzione:** Apri un terminale nella directory del progetto ed esegui il comando:
     ```bash
     python ids_classifier.py
     ```
