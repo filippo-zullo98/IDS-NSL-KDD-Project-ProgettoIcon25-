@@ -1,5 +1,6 @@
 # Ambiente Virtuale Python (venv)
 venv/
+.venv/
 
 # File di Cache e Build
 __pycache__/
