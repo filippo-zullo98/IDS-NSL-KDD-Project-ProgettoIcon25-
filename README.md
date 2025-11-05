@@ -120,8 +120,7 @@ I risultati di questo progetto dimostrano che l'approccio ibrido, che combina Ma
 
 1.  **Clonare il Repository:** Apri un terminale ed esegui il seguente comando per clonare il progetto:
     ```bash
-    git clone [https://github.com/filippo-zullo98/IDS-NSL-KDD-Project-ProgettoIcon25-.git](https://github.com/filippo-zullo98/IDS-NSL-KDD-Project-ProgettoIcon25-.git)
-    cd IDS-NSL-KDD-Project
+    git clone https://github.com/filippo-zullo98/ProgettoIcon2025.git
     ```
 2. **Dataset:** Scaricare i file **KDDTrain+.txt** e **KDDTest+.txt** e posizionarli nella stessa directory dello script.
 
