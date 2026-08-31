@@ -1,311 +1,387 @@
-# ids_classifier.py - Codice completo e aggiornato
+# =============================================================================
+# ids_classifier.py  –  IDS ibrido NSL-KDD  
+# =============================================================================
 
-# Fase 1: Importazioni e Caricamento Dati
+# ── Fase 1: Importazioni ─────────────────────────────────────────────────────
+
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from owlready2 import get_ontology
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-from owlready2 import *
+from sklearn.metrics import (classification_report, confusion_matrix,
+                             accuracy_score, f1_score)
+from sklearn.feature_selection import VarianceThreshold
 
-# Definiamo i nomi delle colonne per il dataset NSL-KDD
-feature_names = [
+# ── Fase 2: Caricamento dati ──────────────────────────────────────────────────
+
+FEATURE_NAMES = [
     'duration', 'protocol_type', 'service', 'flag', 'src_bytes', 'dst_bytes',
     'land', 'wrong_fragment', 'urgent', 'hot', 'num_failed_logins',
     'logged_in', 'num_compromised', 'root_shell', 'su_attempted', 'num_root',
     'num_file_creations', 'num_shells', 'num_access_files', 'num_outbound_cmds',
     'is_host_login', 'is_guest_login', 'count', 'srv_count', 'serror_rate',
     'srv_serror_rate', 'rerror_rate', 'srv_rerror_rate', 'same_srv_rate',
-    'diff_srv_rate', 'srv_diff_host_rate', 'dst_host_count', 'dst_host_srv_count',
-    'dst_host_same_srv_rate', 'dst_host_diff_srv_rate', 'dst_host_same_src_port_rate',
-    'dst_host_srv_diff_host_rate', 'dst_host_serror_rate', 'dst_host_srv_serror_rate',
-    'dst_host_rerror_rate', 'dst_host_srv_rerror_rate', 'attack_type', 'difficulty'
+    'diff_srv_rate', 'srv_diff_host_rate', 'dst_host_count',
+    'dst_host_srv_count', 'dst_host_same_srv_rate', 'dst_host_diff_srv_rate',
+    'dst_host_same_src_port_rate', 'dst_host_srv_diff_host_rate',
+    'dst_host_serror_rate', 'dst_host_srv_serror_rate', 'dst_host_rerror_rate',
+    'dst_host_srv_rerror_rate', 'attack_type', 'difficulty'
 ]
 
-# Carichiamo il dataset di training
 try:
-    df_train = pd.read_csv('KDDTrain+.txt', names=feature_names)
-    print("Dataset di training caricato con successo.")
-except FileNotFoundError:
-    print("Errore: KDDTrain+.txt non trovato. Assicurati che i file del dataset siano nella stessa directory dello script.")
-    exit()
+    df_train = pd.read_csv('KDDTrain+.txt', names=FEATURE_NAMES)
+    df_test  = pd.read_csv('KDDTest+.txt',  names=FEATURE_NAMES)
+    print("Dataset caricato: train", df_train.shape, "| test", df_test.shape)
+except FileNotFoundError as e:
+    print(f"Errore: {e}. Posiziona KDDTrain+.txt e KDDTest+.txt nella stessa directory.")
+    exit(1)
 
-# Carichiamo il dataset di test
-try:
-    df_test = pd.read_csv('KDDTest+.txt', names=feature_names)
-    print("Dataset di test caricato con successo.")
-except FileNotFoundError:
-    print("Errore: KDDTest+.txt non trovato. Assicurati che i file del dataset siano nella stessa directory dello script.")
-    exit()
+# ── Fase 3: Mapping attack_type → categoria (letto dall'ontologia OWL) ────────
 
-print("\n--- Informazioni sul Dataset di Training ---")
-print(df_train.head())
-print("\nShape del dataset di training:", df_train.shape)
-print("\nStatistiche descrittive:")
-print(df_train.describe())
+def build_category_map_from_ontology(owl_path: str) -> dict:
+    onto = get_ontology(owl_path).load()
+    ns = onto.get_namespace("http://www.semanticweb.org/nsl-kdd-ids#")
 
-print("\n--- Distribuzione dei Tipi di Attacco nel Training Set ---")
-print(df_train['attack_type'].value_counts())
+    CATEGORY_CLASS_NAMES = {
+        'NormalTraffic': 'Normal',
+        'DoSAttack':     'DoS',
+        'ProbeAttack':   'Probe',
+        'R2LAttack':     'R2L',
+        'U2RAttack':     'U2R',
+    }
 
-# Mappa tutti gli attacchi alla categoria 'attack' e 'normal' a 'normal'.
-# Questo rende il problema una classificazione binaria.
-df_train['target'] = df_train['attack_type'].apply(lambda x: 'normal' if x == 'normal' else 'attack')
-df_test['target'] = df_test['attack_type'].apply(lambda x: 'normal' if x == 'normal' else 'attack')
+    category_map = {}
 
-print("\n--- Distribuzione delle Classi (Normal/Attack) nel Training Set ---")
+    for individual in onto.individuals():
+        # Controlla se ha la data property hasAttackName
+        names = getattr(individual, 'hasAttackName', [])
+        if not names:
+            continue
+        attack_name = names[0].lower()
+
+        # Risali la categoria guardando il tipo diretto dell'individuo
+        for cls in individual.is_a:
+            cls_name = getattr(cls, 'name', '')
+            if cls_name in CATEGORY_CLASS_NAMES:
+                category_map[attack_name] = CATEGORY_CLASS_NAMES[cls_name]
+                break
+            # Controlla anche le superclassi (es. DoS_Category è istanza di DoSAttack)
+            for parent in getattr(cls, 'is_a', []):
+                parent_name = getattr(parent, 'name', '')
+                if parent_name in CATEGORY_CLASS_NAMES:
+                    category_map[attack_name] = CATEGORY_CLASS_NAMES[parent_name]
+                    break
+
+    print(f"  Ontologia caricata: {len(category_map)} tipi di attacco mappati.")
+    return category_map
+
+print("\n── Caricamento ontologia ─────────────────────────────────────────────")
+CATEGORY_MAP = build_category_map_from_ontology("file://nsl_kdd_ontology.owl")
+
+# Fallback per eventuali attacchi non presenti nell'ontologia (dataset NSL-KDD completo)
+_FALLBACK_MAP = {
+    # DoS
+    'back':'DoS','land':'DoS','neptune':'DoS','pod':'DoS','smurf':'DoS',
+    'teardrop':'DoS','apache2':'DoS','udpstorm':'DoS','processtable':'DoS',
+    'worm':'DoS','mailbomb':'DoS',
+    # Probe
+    'satan':'Probe','ipsweep':'Probe','nmap':'Probe','portsweep':'Probe',
+    'mscan':'Probe','saint':'Probe',
+    # R2L
+    'guess_passwd':'R2L','ftp_write':'R2L','imap':'R2L','phf':'R2L',
+    'multihop':'R2L','warezmaster':'R2L','warezclient':'R2L','spy':'R2L',
+    'xlock':'R2L','xsnoop':'R2L','snmpguess':'R2L','snmpgetattack':'R2L',
+    'httptunnel':'R2L','sendmail':'R2L','named':'R2L',
+    # U2R
+    'buffer_overflow':'U2R','loadmodule':'U2R','perl':'U2R','rootkit':'U2R',
+    'sqlattack':'U2R','xterm':'U2R','ps':'U2R',
+    # Normal
+    'normal':'Normal',
+}
+# Integra il fallback solo per le chiavi mancanti
+for k, v in _FALLBACK_MAP.items():
+    CATEGORY_MAP.setdefault(k, v)
+
+
+def map_to_category(attack_type: str) -> str:
+    """Converte un attack_type raw nel label multi-classe."""
+    return CATEGORY_MAP.get(attack_type.lower().strip(), 'DoS')  # default DoS se sconosciuto
+
+
+# Costruzione del target multi-classe (usa solo la colonna attack_type, mai come feature)
+for df in [df_train, df_test]:
+    df['target'] = df['attack_type'].apply(map_to_category)
+
+print("\nDistribuzione classi (train):")
 print(df_train['target'].value_counts())
+print("\nDistribuzione classi (test):")
+print(df_test['target'].value_counts())
 
-# Fase 2: Pre-elaborazione Dati (Feature Engineering e Trasformazioni)
+# ── Fase 4: Feature Engineering – inferred_attack_category (SENZA leakage) ───
+#
+# NOTA: questa feature è derivata ESCLUSIVAMENTE da feature di rete osservabili.
+# NON usa attack_type né target in alcun modo.
+# Le regole implementano in Python la semantica delle SWRL rule dell'ontologia.
 
-# Identifica le colonne numeriche e categoriche
-numerical_cols = df_train.select_dtypes(include=np.number).columns.tolist()
-categorical_cols = df_train.select_dtypes(include='object').columns.tolist()
-# Rimuovi le colonne target originali e quelle inutilizzate dal set di feature
-if 'attack_type' in categorical_cols:
-    categorical_cols.remove('attack_type')
-if 'target' in categorical_cols: # Assicurati che 'target' non sia tra le features
-    categorical_cols.remove('target')
+R2L_SERVICES = {'ftp', 'ftp_data', 'telnet', 'ssh', 'smtp', 'pop_3',
+                'imap4', 'login', 'shell', 'exec', 'finger'}
 
-# Identifica le feature (X) e la variabile target (y)
-X_train = df_train.drop(['attack_type', 'difficulty', 'target'], axis=1)
-y_train = df_train['target']
-X_test = df_test.drop(['attack_type', 'difficulty', 'target'], axis=1)
-y_test = df_test['target']
+def infer_category_from_features(row: pd.Series) -> str:
+    """
+    Inferisce una categoria di traffico usando solo feature di rete.
+    Corrisponde alle SWRL rule definite nell'ontologia OWL.
 
-# Rimuovi colonne con varianza zero (se presenti)
-cols_to_drop_zero_variance = []
-for col in df_train.columns:
-    if df_train[col].nunique() == 1:
-        cols_to_drop_zero_variance.append(col)
+    SWRL Rule 1 (DoS SYN flood):  serror_rate > 0.5 AND count > 10
+    SWRL Rule 7 (DoS Smurf):      protocol_type == icmp AND src_bytes > 1000 AND dst_bytes == 0
+    SWRL Rule 2 (Probe ICMP):     protocol_type == icmp AND dst_bytes == 0
+    SWRL Rule 3 (Probe port scan):diff_srv_rate > 0.5 AND count > 30
+    SWRL Rule 5 (U2R root_shell): root_shell == 1
+    SWRL Rule 6 (U2R su attempt): su_attempted > 0
+    SWRL Rule 4 (R2L failed login): num_failed_logins > 0 AND logged_in == 0
+    SWRL Rule 8 (R2L slow brute): service in R2L_SERVICES AND duration > 0 AND logged_in == 0
+    """
+    protocol  = row['protocol_type']
+    service   = row['service']
+    src_bytes = row['src_bytes']
+    dst_bytes = row['dst_bytes']
 
-if cols_to_drop_zero_variance:
-    print(f"\nRimozione colonne con varianza zero: {cols_to_drop_zero_variance}")
-    df_train = df_train.drop(columns=cols_to_drop_zero_variance)
-    df_test = df_test.drop(columns=cols_to_drop_zero_variance)
+    # U2R – priorità alta: segnali di privilege escalation molto specifici
+    if row['root_shell'] == 1:
+        return 'U2R'
+    if row['su_attempted'] > 0:
+        return 'U2R'
 
-# --- NUOVA SEZIONE: INTEGRAZIONE DELLE CONOSCENZE DI DOMINIO ---
+    # DoS – attacchi volumetrici / SYN flood
+    if row['serror_rate'] > 0.5 and row['count'] > 10:
+        return 'DoS'
+    if protocol == 'icmp' and src_bytes > 1000 and dst_bytes == 0:
+        return 'DoS'
 
-print("\n--- Integrazione del Knowledge Engineering ---")
-# Carica l'ontologia
-onto = get_ontology("file://nsl_kdd_ontology.owl").load()
-print("Ontologia 'nsl_kdd_ontology.owl' caricata con successo.")
-# Mappa per il ragionamento automatico (semplificato)
-attack_rules = {
-    ('tcp', 'ftp_data'): 'R2L',  # Esempio: R2L
-    ('tcp', 'telnet'): 'R2L',  # Esempio: R2L
-    ('icmp', 'ecr_i'): 'Probe',  # Esempio: Probe
-    ('udp', 'domain_u'): 'Probe',  # Esempio: Probe
-}
-def get_inferred_attack_category(row):
-    """Restituisce una categoria inferita per l'attacco basata su protocollo e servizio."""
-    protocol_type = row['protocol_type']
-    service = row['service']
-    inferred_category = attack_rules.get((protocol_type, service), 'Unknown')
-    if row['attack_type'] == 'normal':
-        return 'Normal'
-    return inferred_category
+    # Probe – scanning / surveillance
+    if protocol == 'icmp' and dst_bytes == 0:
+        return 'Probe'
+    if row['diff_srv_rate'] > 0.5 and row['count'] > 30:
+        return 'Probe'
 
-# Applica la funzione per creare la nuova feature per i dataset di training e test
-df_train['inferred_attack_category'] = df_train.apply(get_inferred_attack_category, axis=1)
-df_test['inferred_attack_category'] = df_test.apply(get_inferred_attack_category, axis=1)
-print("\nNuova feature 'inferred_attack_category' creata con successo.")
-print(df_train[['protocol_type', 'service', 'attack_type', 'inferred_attack_category']].head())
+    # R2L – tentativi di accesso remoto falliti
+    if row['num_failed_logins'] > 0 and row['logged_in'] == 0:
+        return 'R2L'
+    if service in R2L_SERVICES and row['duration'] > 0 and row['logged_in'] == 0 and src_bytes < 500:
+        return 'R2L'
 
-# --- FINE NUOVA SEZIONE ---
-
-# Identifica le feature (X) e la variabile target (y) DOPO AVER AGGIUNTO LA NUOVA FEATURE
-X_train = df_train.drop(['attack_type', 'difficulty', 'target'], axis=1)
-y_train = df_train['target']
-X_test = df_test.drop(['attack_type', 'difficulty', 'target'], axis=1)
-y_test = df_test['target']
-
-# Aggiorna le liste delle colonne dopo la rimozione e l'aggiunta della nuova feature
-numerical_cols = X_train.select_dtypes(include=np.number).columns.tolist()
-categorical_cols = X_train.select_dtypes(include='object').columns.tolist()
-
-# AGGIUNGI QUESTA RIGA: la tua nuova feature non è un tipo 'object'
-# perché contiene stringhe che devono essere trattate come categoriche.
-# L'approccio migliore è aggiungerla alla lista manualmente.
-if 'inferred_attack_category' not in categorical_cols:
-    categorical_cols.append('inferred_attack_category')
-
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', StandardScaler(), numerical_cols),
-        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
-    ])
+    return 'Unknown'
 
 
+print("\n── Feature Engineering (inferred_attack_category) ───────────────────")
+df_train['inferred_attack_category'] = df_train.apply(infer_category_from_features, axis=1)
+df_test['inferred_attack_category']  = df_test.apply(infer_category_from_features, axis=1)
 
-# Codifica la variabile target (y)
-# 'normal' -> 0, 'attack' -> 1 (l'ordine dipende da LabelEncoder)
+print("Distribuzione inferred_attack_category (train):")
+print(df_train['inferred_attack_category'].value_counts())
+
+# ── Fase 5: Preparazione X / y ────────────────────────────────────────────────
+
+COLS_TO_DROP = ['attack_type', 'difficulty', 'target']
+
+X_train_raw = df_train.drop(columns=COLS_TO_DROP)
+X_test_raw  = df_test.drop(columns=COLS_TO_DROP)
+y_train_raw = df_train['target']
+y_test_raw  = df_test['target']
+
+# Rimozione colonne a varianza zero PRIMA del preprocessore
+#   (fit sulla sola X_train per evitare leakage dal test set)
+num_cols_tmp = X_train_raw.select_dtypes(include=np.number).columns.tolist()
+zero_var_cols = [c for c in num_cols_tmp if X_train_raw[c].nunique() == 1]
+if zero_var_cols:
+    print(f"\nRimossa/e colonna/e a varianza zero: {zero_var_cols}")
+    X_train_raw = X_train_raw.drop(columns=zero_var_cols)
+    X_test_raw  = X_test_raw.drop(columns=[c for c in zero_var_cols if c in X_test_raw.columns])
+
+# Colonne finali
+numerical_cols   = X_train_raw.select_dtypes(include=np.number).columns.tolist()
+categorical_cols = X_train_raw.select_dtypes(include='object').columns.tolist()
+
+print(f"\nFeature numeriche ({len(numerical_cols)}): {numerical_cols[:5]} ...")
+print(f"Feature categoriche ({len(categorical_cols)}): {categorical_cols}")
+
+# Codifica del target
 label_encoder = LabelEncoder()
-y_train_encoded = label_encoder.fit_transform(y_train)
-y_test_encoded = label_encoder.transform(y_test)
+y_train = label_encoder.fit_transform(y_train_raw)
+y_test  = label_encoder.transform(y_test_raw)
+CLASS_NAMES = label_encoder.classes_
+print(f"\nClassi (ordine LabelEncoder): {CLASS_NAMES}")
 
-print("\n--- Anteprima delle Feature dopo la Preparazione (prima della trasformazione finale) ---")
-print(X_train.head())
-print("\nTarget codificato (prime 5):", y_train_encoded[:5])
-print("Mapping classi:", label_encoder.classes_)
+# ── Fase 6: Preprocessore ────────────────────────────────────────────────────
 
+preprocessor = ColumnTransformer(transformers=[
+    ('num', StandardScaler(),                  numerical_cols),
+    ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols),
+])
 
-# Fase 3: Costruzione delle Pipeline e Addestramento dei Modelli
+# ── Fase 7: SMOTE multi-classe ───────────────────────────────────────────────
+#
+# U2R e R2L hanno pochissimi esempi; k_neighbors deve essere < min_class_count - 1.
+# Usiamo k_neighbors=1 che funziona sempre, anche con classi da 2 campioni.
 
-# --- Modelli SENZA SMOTE ---
+min_class_count = pd.Series(y_train).value_counts().min()
+k_neighbors_safe = max(1, min(5, min_class_count - 1))
+print(f"\nSMOTE k_neighbors scelto automaticamente: {k_neighbors_safe} "
+      f"(classe più piccola: {min_class_count} campioni)")
 
-print("\n--- Addestramento del Modello (Decision Tree SENZA SMOTE) ---")
-model_dt_no_smote = Pipeline(steps=[('preprocessor', preprocessor),
-                                    ('classifier', DecisionTreeClassifier(random_state=42))])
-model_dt_no_smote.fit(X_train, y_train_encoded)
-y_pred_dt_no_smote = model_dt_no_smote.predict(X_test)
-print("Decision Tree SENZA SMOTE addestrato.")
-print("Accuracy (DT senza SMOTE):", accuracy_score(y_test_encoded, y_pred_dt_no_smote))
+smote = SMOTE(random_state=42, k_neighbors=k_neighbors_safe)
 
-# Visualizza e salva la Matrice di Confusione (Opzionale: puoi commentare se non vuoi 4 grafici)
-cm_dt_no_smote = confusion_matrix(y_test_encoded, y_pred_dt_no_smote)
-plt.figure(figsize=(8, 6))
-sns.heatmap(cm_dt_no_smote, annot=True, fmt='d', cmap='Blues',
-            xticklabels=label_encoder.classes_,
-            yticklabels=label_encoder.classes_)
-plt.title('Matrice di Confusione - Decision Tree SENZA SMOTE')
-plt.xlabel('Predetto')
-plt.ylabel('Vero')
-plt.savefig('confusion_matrix_dt_no_smote.png')
-plt.close()
+# ── Fase 8: Funzioni di supporto ─────────────────────────────────────────────
 
-
-print("\n--- Addestramento del Modello (Random Forest SENZA SMOTE) ---")
-model_rf_no_smote = Pipeline(steps=[('preprocessor', preprocessor),
-                                    ('classifier', RandomForestClassifier(random_state=42, n_estimators=100))])
-model_rf_no_smote.fit(X_train, y_train_encoded)
-y_pred_rf_no_smote = model_rf_no_smote.predict(X_test)
-print("Random Forest SENZA SMOTE addestrato.")
-print("Accuracy (RF senza SMOTE):", accuracy_score(y_test_encoded, y_pred_rf_no_smote))
-
-# Visualizza e salva la Matrice di Confusione (Opzionale)
-cm_rf_no_smote = confusion_matrix(y_test_encoded, y_pred_rf_no_smote)
-plt.figure(figsize=(8, 6))
-sns.heatmap(cm_rf_no_smote, annot=True, fmt='d', cmap='Blues',
-            xticklabels=label_encoder.classes_,
-            yticklabels=label_encoder.classes_)
-plt.title('Matrice di Confusione - Random Forest SENZA SMOTE')
-plt.xlabel('Predetto')
-plt.ylabel('Vero')
-plt.savefig('confusion_matrix_rf_no_smote.png')
-plt.close()
-
-# --- Modelli CON SMOTE ---
-
-print("\n--- Addestramento del Modello (Decision Tree con SMOTE) ---")
-model_dt_smote = ImbPipeline(steps=[('preprocessor', preprocessor),
-                                     ('smote', SMOTE(random_state=42)),
-                                     ('classifier', DecisionTreeClassifier(random_state=42))])
-
-model_dt_smote.fit(X_train, y_train_encoded)
-print("Decision Tree con SMOTE addestrato.")
-
-y_pred_dt_smote = model_dt_smote.predict(X_test)
-
-print("\n--- Valutazione del Modello Decision Tree con SMOTE ---")
-print("Accuracy:", accuracy_score(y_test_encoded, y_pred_dt_smote))
-print("\nClassification Report:")
-print(classification_report(y_test_encoded, y_pred_dt_smote, target_names=label_encoder.classes_))
-
-cm_dt_smote = confusion_matrix(y_test_encoded, y_pred_dt_smote)
-plt.figure(figsize=(8, 6))
-sns.heatmap(cm_dt_smote, annot=True, fmt='d', cmap='Blues',
-            xticklabels=label_encoder.classes_,
-            yticklabels=label_encoder.classes_)
-plt.title('Matrice di Confusione - Decision Tree con SMOTE')
-plt.xlabel('Predetto')
-plt.ylabel('Vero')
-plt.savefig('confusion_matrix_dt_smote.png')
-plt.close()
+def plot_confusion_matrix(y_true, y_pred, title: str, filename: str):
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=CLASS_NAMES, yticklabels=CLASS_NAMES)
+    plt.title(title)
+    plt.xlabel('Predetto')
+    plt.ylabel('Vero')
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+    print(f"  Matrice di confusione salvata: {filename}")
 
 
-print("\n--- Addestramento del Modello (Random Forest con SMOTE) ---")
-model_rf_smote = ImbPipeline(steps=[('preprocessor', preprocessor),
-                                    ('smote', SMOTE(random_state=42)),
-                                    ('classifier', RandomForestClassifier(random_state=42, n_estimators=100))])
-
-model_rf_smote.fit(X_train, y_train_encoded)
-print("Random Forest con SMOTE addestrato.")
-
-y_pred_rf_smote = model_rf_smote.predict(X_test) # Rinominata per chiarezza, prima era y_pred_rf
-
-print("\n--- Valutazione del Modello Random Forest con SMOTE ---")
-print("Accuracy:", accuracy_score(y_test_encoded, y_pred_rf_smote))
-print("\nClassification Report:")
-print(classification_report(y_test_encoded, y_pred_rf_smote, target_names=label_encoder.classes_))
-
-cm_rf_smote = confusion_matrix(y_test_encoded, y_pred_rf_smote)
-plt.figure(figsize=(8, 6))
-sns.heatmap(cm_rf_smote, annot=True, fmt='d', cmap='Blues',
-            xticklabels=label_encoder.classes_,
-            yticklabels=label_encoder.classes_)
-plt.title('Matrice di Confusione - Random Forest con SMOTE')
-plt.xlabel('Predetto')
-plt.ylabel('Vero')
-plt.savefig('confusion_matrix_rf_smote.png')
-plt.close()
+def evaluate(name: str, y_true, y_pred):
+    acc = accuracy_score(y_true, y_pred)
+    f1  = f1_score(y_true, y_pred, average='macro')
+    print(f"\n{'─'*60}")
+    print(f"  {name}")
+    print(f"  Accuracy: {acc:.4f}  |  Macro F1: {f1:.4f}")
+    print(classification_report(y_true, y_pred, target_names=CLASS_NAMES))
+    return acc, f1
 
 
-# --- Ottimizzazione Iperparametri con GridSearchCV (Random Forest con SMOTE) ---
+results = {}   # { nome_modello: (accuracy, macro_f1) }
 
-print("\n--- Ottimizzazione Iperparametri con GridSearchCV (Random Forest con SMOTE) ---")
+# ── Fase 9: Decision Tree SENZA SMOTE ────────────────────────────────────────
 
-param_grid_rf = {
+print("\n\n══ Decision Tree SENZA SMOTE ══════════════════════════════════════════")
+dt_no_smote = Pipeline([
+    ('preprocessor', preprocessor),
+    ('classifier', DecisionTreeClassifier(random_state=42)),
+])
+dt_no_smote.fit(X_train_raw, y_train)
+y_pred = dt_no_smote.predict(X_test_raw)
+acc, f1 = evaluate("Decision Tree – NO SMOTE", y_test, y_pred)
+results['DT no SMOTE'] = (acc, f1)
+plot_confusion_matrix(y_test, y_pred,
+                      'Confusion Matrix – Decision Tree (no SMOTE)',
+                      'confusion_matrix_dt_no_smote.png')
+
+# ── Fase 10: Random Forest SENZA SMOTE ───────────────────────────────────────
+
+print("\n\n══ Random Forest SENZA SMOTE ══════════════════════════════════════════")
+rf_no_smote = Pipeline([
+    ('preprocessor', preprocessor),
+    ('classifier', RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)),
+])
+rf_no_smote.fit(X_train_raw, y_train)
+y_pred = rf_no_smote.predict(X_test_raw)
+acc, f1 = evaluate("Random Forest – NO SMOTE", y_test, y_pred)
+results['RF no SMOTE'] = (acc, f1)
+plot_confusion_matrix(y_test, y_pred,
+                      'Confusion Matrix – Random Forest (no SMOTE)',
+                      'confusion_matrix_rf_no_smote.png')
+
+# ── Fase 11: Decision Tree CON SMOTE ─────────────────────────────────────────
+
+print("\n\n══ Decision Tree CON SMOTE ════════════════════════════════════════════")
+dt_smote = ImbPipeline([
+    ('preprocessor', preprocessor),
+    ('smote', smote),
+    ('classifier', DecisionTreeClassifier(random_state=42)),
+])
+dt_smote.fit(X_train_raw, y_train)
+y_pred = dt_smote.predict(X_test_raw)
+acc, f1 = evaluate("Decision Tree – CON SMOTE", y_test, y_pred)
+results['DT SMOTE'] = (acc, f1)
+plot_confusion_matrix(y_test, y_pred,
+                      'Confusion Matrix – Decision Tree (SMOTE)',
+                      'confusion_matrix_dt_smote.png')
+
+# ── Fase 12: Random Forest CON SMOTE ─────────────────────────────────────────
+
+print("\n\n══ Random Forest CON SMOTE ════════════════════════════════════════════")
+rf_smote = ImbPipeline([
+    ('preprocessor', preprocessor),
+    ('smote', smote),
+    ('classifier', RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)),
+])
+rf_smote.fit(X_train_raw, y_train)
+y_pred = rf_smote.predict(X_test_raw)
+acc, f1 = evaluate("Random Forest – CON SMOTE", y_test, y_pred)
+results['RF SMOTE'] = (acc, f1)
+plot_confusion_matrix(y_test, y_pred,
+                      'Confusion Matrix – Random Forest (SMOTE)',
+                      'confusion_matrix_rf_smote.png')
+
+# ── Fase 13: GridSearchCV – Random Forest CON SMOTE ──────────────────────────
+
+print("\n\n══ GridSearchCV – Random Forest CON SMOTE ═════════════════════════════")
+param_grid = {
     'classifier__n_estimators': [50, 100, 200],
-    'classifier__max_depth': [10, 20, None],
-    'classifier__min_samples_split': [2, 5]
+    'classifier__max_depth':    [10, 20, None],
+    'classifier__min_samples_split': [2, 5],
 }
+gs_pipeline = ImbPipeline([
+    ('preprocessor', preprocessor),
+    ('smote', smote),
+    ('classifier', RandomForestClassifier(random_state=42, n_jobs=-1)),
+])
+grid_search = GridSearchCV(gs_pipeline, param_grid, cv=3,
+                           scoring='f1_macro', n_jobs=-1, verbose=2)
+print("Avvio GridSearchCV (scoring=f1_macro) ...")
+grid_search.fit(X_train_raw, y_train)
 
-pipeline_rf_gs = ImbPipeline(steps=[('preprocessor', preprocessor),
-                                    ('smote', SMOTE(random_state=42)),
-                                    ('classifier', RandomForestClassifier(random_state=42))])
+print(f"\nMigliori parametri: {grid_search.best_params_}")
+print(f"Miglior F1 macro (CV): {grid_search.best_score_:.4f}")
 
-grid_search_rf = GridSearchCV(pipeline_rf_gs, param_grid_rf, cv=3, scoring='f1', n_jobs=-1, verbose=2)
+y_pred = grid_search.best_estimator_.predict(X_test_raw)
+acc, f1 = evaluate("Random Forest GridSearchCV (best)", y_test, y_pred)
+results['RF GridSearch'] = (acc, f1)
+plot_confusion_matrix(y_test, y_pred,
+                      'Confusion Matrix – RF GridSearchCV (best)',
+                      'confusion_matrix_best_rf_gridsearch.png')
 
-print("Avvio GridSearchCV...")
-grid_search_rf.fit(X_train, y_train_encoded)
-print("GridSearchCV completato.")
+# ── Fase 14: Confronto finale ─────────────────────────────────────────────────
 
-print("\n--- Risultati GridSearchCV per Random Forest ---")
-print("Migliori parametri trovati:", grid_search_rf.best_params_)
-print("Miglior F1-score con cross-validation:", grid_search_rf.best_score_)
+print("\n\n══ CONFRONTO FINALE ═══════════════════════════════════════════════════")
+print(f"{'Modello':<25} {'Accuracy':>10} {'Macro F1':>10}")
+print("─" * 48)
+for name, (acc, f1) in results.items():
+    print(f"{name:<25} {acc:>10.4f} {f1:>10.4f}")
 
-best_rf_model = grid_search_rf.best_estimator_
-y_pred_best_rf = best_rf_model.predict(X_test)
-
-print("\n--- Valutazione del Miglior Modello Random Forest (GridSearchCV) ---")
-print("Accuracy:", accuracy_score(y_test_encoded, y_pred_best_rf))
-print("\nClassification Report:")
-print(classification_report(y_test_encoded, y_pred_best_rf, target_names=label_encoder.classes_))
-
-cm_best_rf = confusion_matrix(y_test_encoded, y_pred_best_rf)
-plt.figure(figsize=(8, 6))
-sns.heatmap(cm_best_rf, annot=True, fmt='d', cmap='Blues',
-            xticklabels=label_encoder.classes_,
-            yticklabels=label_encoder.classes_)
-plt.title('Matrice di Confusione - Miglior Random Forest (GridSearchCV)')
-plt.xlabel('Predetto')
-plt.ylabel('Vero')
-plt.savefig('confusion_matrix_best_rf_gridsearch.png')
+# Grafico confronto F1
+fig, ax = plt.subplots(figsize=(9, 5))
+names = list(results.keys())
+f1s   = [v[1] for v in results.values()]
+accs  = [v[0] for v in results.values()]
+x = np.arange(len(names))
+w = 0.35
+ax.bar(x - w/2, accs, w, label='Accuracy', color='steelblue')
+ax.bar(x + w/2, f1s,  w, label='Macro F1', color='darkorange')
+ax.set_xticks(x)
+ax.set_xticklabels(names, rotation=15, ha='right')
+ax.set_ylim(0, 1.05)
+ax.set_title('Confronto modelli – Classificazione multi-classe NSL-KDD')
+ax.legend()
+plt.tight_layout()
+plt.savefig('model_comparison.png')
 plt.close()
-
-# --- Confronto Finale dei Risultati ---
-
-print("\n--- Confronto dei Risultati (Accuracy) ---")
-print("Decision Tree Accuracy (SENZA SMOTE):", accuracy_score(y_test_encoded, y_pred_dt_no_smote))
-print("Decision Tree Accuracy (CON SMOTE):", accuracy_score(y_test_encoded, y_pred_dt_smote))
-print("Random Forest Accuracy (SENZA SMOTE):", accuracy_score(y_test_encoded, y_pred_rf_no_smote))
-print("Random Forest Accuracy (CON SMOTE):", accuracy_score(y_test_encoded, y_pred_rf_smote))
-print("Random Forest Accuracy (GridSearchCV - Ottimizzato):", accuracy_score(y_test_encoded, y_pred_best_rf))
+print("\nGrafico confronto salvato: model_comparison.png")
+print("\nDone.")
